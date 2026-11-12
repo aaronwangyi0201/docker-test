@@ -1,4 +1,5 @@
-FROM busybox:1.37.0 AS generate
+ARG GENERATOR_IMAGE=busybox:1.37.0
+FROM ${GENERATOR_IMAGE} AS generate
 ARG MATERIAL_ID
 RUN test -n "$MATERIAL_ID" \
     && mkdir -p /out/data \

@@ -14,6 +14,9 @@ ACR build settings:
 - Dockerfile: `/Dockerfile`
 - Context: repository root
 - Build argument: `MATERIAL_ID=<batch>-<index>`
+- Optional build argument: `GENERATOR_IMAGE=<reachable image with sh, dd, mkdir,
+  chmod and sha256sum>`; use a digest to pin an existing registry image when
+  Docker Hub is unavailable. The generator image is excluded from the final image.
 - Output tag: a unique tag matching that material ID
 
 The build log prints the file SHA-256. Verify that each published image has
