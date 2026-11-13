@@ -1,0 +1,82 @@
+name: Build GHCR Layer fixtures
+run-name: Layer fixtures ${{ inputs.batch }} (${{ inputs.first }} + ${{ inputs.count }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      batch:
+        description: Unique batch prefix for image tags
+        required: true
+        type: string
+      first:
+        description: First fixture number (1-30)
+        default: '1'
+        type: string
+      count:
+        description: Number of fixtures to build (1-30)
+        default: '1'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      numbers: ${{ steps.matrix.outputs.numbers }}
+    steps:
+      - id: matrix
+        env:
+          BATCH: ${{ inputs.batch }}
+          FIRST: ${{ inputs.first }}
+          COUNT: ${{ inputs.count }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          first, count = int(os.environ['FIRST']), int(os.environ['COUNT'])
+          assert re.fullmatch(r'[a-z0-9][a-z0-9-]{0,63}', os.environ['BATCH'])
+          assert 1 <= first <= 30 and 1 <= count <= 30 and first + count <= 31
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write('numbers=' + json.dumps(list(range(first, first + count))) + '\n')
+          PY
+
+  build:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        number: ${{ fromJSON(needs.plan.outputs.numbers) }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Build and push unique random-data layer
+        env:
+          BATCH: ${{ inputs.batch }}
+          NUMBER: ${{ matrix.number }}
+        run: |
+          tag="${BATCH}-$(printf '%02d' "$NUMBER")"
+          image="ghcr.io/aaronwangyi0201/layer-fixtures:${tag}"
+          docker buildx build --platform linux/amd64 --no-cache \
+            --provenance=false --sbom=false --push \
+            --build-arg "MATERIAL_ID=$tag" \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --metadata-file metadata.json --tag "$image" .
+          jq --arg image "$image" --argjson number "$NUMBER" \
+            '{number: $number, image: $image, digest: .["containerimage.digest"]}' \
+            metadata.json > fixture.json
+          cat fixture.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fixture-${{ matrix.number }}
+          path: fixture.json
+          retention-days: 30

@@ -21,3 +21,13 @@ ACR build settings:
 
 The build log prints the file SHA-256. Verify that each published image has
 one layer and that the layer digests differ across the batch.
+
+## GitHub Actions / GHCR
+
+Run `Build GHCR Layer fixtures` with a unique `batch`, `first`, and `count`.
+Build fixture 1 first; after validating it, build fixtures 2 through 30 with
+`first=2`, `count=29`, and the same batch. Up to five builds run concurrently.
+Each build pushes `ghcr.io/aaronwangyi0201/layer-fixtures:<batch>-<number>`
+and saves its image digest in a workflow artifact. The workflow uses
+`GITHUB_TOKEN`; no registry password or cloud credentials are stored here.
+Set the GHCR package visibility to Public before anonymous Layer builds.
